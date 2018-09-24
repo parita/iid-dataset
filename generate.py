@@ -23,10 +23,11 @@ class Generator():
 
     def setup_lamp(self):
         self.lamp = bpy.data.lamps['Lamp']
-        self.lamp.type = "AREA"
-        self.lamp.color = np.random.random((3,))
-        self.lamp.energy = 1.0
-        self.lamp.distance = 10.0
+        self.lamp.type = "SUN"
+        self.lamp.color = (0.5172079205513, 0.9855771064758301, 1.0) # set to bluish light
+        #self.lamp.color = np.random.random((3,))
+        self.lamp.energy = 0.5
+        #self.lamp.distance = 10.0
 
     def add_material(sekf):
         bpy.data.materials.new(name = "Material")
@@ -51,6 +52,7 @@ class Generator():
 
         self.scene.objects.link(path)
         self.scene.objects.active = path
+        path.hide_render = True
 
         return path
 

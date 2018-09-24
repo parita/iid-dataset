@@ -80,13 +80,35 @@ class Generator():
         self.setup_lamp()
         self.setup_cube()
 
-    def render(self):
+    def setup_render_node_tree(self, out_dir):
+        tree = self.scene.node_tree
+        nodes = tree.nodes
+        links = tree.links
+        for node in nodes:
+            nodes.remove(node)
+        for link in links:
+            nodes.remove(link)
+
+        rlayers_node = nodes.new(type = "CompositorNodeRLayers")
+
+        image_node = nodes.new(type = "CompositorNodeOutputFile")
+        image_node.base_path = os.path.join(out_dir, "images/")
+        links.new(rlayers_node.outputs["Image"], image_node.inputs["Image"])
+
+        color_node = nodes.new(type = "CompositorNodeOutputFile")
+        color_node.base_path = os.path.join(out_dir, "reflectance/")
+        links.new(rlayers_node.outputs["Color"], color_node.inputs["Image"])
+
+    def render_scene(self, out_dir):
         self.render.engine = "BLENDER_RENDER"
-        self.render.use_nodes = True
+        self.scene.use_nodes = True
+        self.render.layers["RenderLayer"].use_pass_color = True
+        self.setup_render_node_tree(out_dir)
+        bpy.ops.render.render(animation = True)
 
     def generate(self, out_dir):
         self.setup_scene()
-        self.render()
+        self.render_scene(out_dir)
 
 def main():
     argv = sys.argv
@@ -99,13 +121,19 @@ def main():
     ap = argparse.ArgumentParser(description = "Script to generate IID dataset")
     ap.add_argument("--out-dir", type = str, default = "./output",
                     help = "Output directory for saving the video clips")
+    ap.add_argument("--num-videos", type = int, default = 5,
+                    help = "Number of videos to generate")
     args = ap.parse_args(argv)
 
     if not os.path.isdir(args.out_dir):
         os.makedirs(args.out_dir)
 
-    scene = Generator()
-    scene.generate(out_dir = args.out_dir)
+    for itr in range(args.num_videos):
+        out_dir = os.path.join(args.out_dir, str(itr) + "/")
+        if not os.path.isdir(out_dir):
+            os.makedirs(out_dir)
+        scene = Generator()
+        scene.generate(out_dir = out_dir)
 
 if __name__=="__main__":
     main()

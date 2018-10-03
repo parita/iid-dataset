@@ -24,7 +24,8 @@ class Generator():
     def setup_lamp(self):
         self.lamp = bpy.data.lamps['Lamp']
         self.lamp.type = "SUN"
-        self.lamp.color = (0.5172079205513, 0.9855771064758301, 1.0) # set to bluish light
+        #self.lamp.color = (0.5172079205513, 0.9855771064758301, 1.0) # set to bluish light
+        self.lamp.color = (1.0, 1.0, 1.0)
         #self.lamp.color = np.random.random((3,))
         self.lamp.energy = 0.5
         #self.lamp.distance = 10.0
@@ -123,7 +124,7 @@ def main():
     ap = argparse.ArgumentParser(description = "Script to generate IID dataset")
     ap.add_argument("--out-dir", type = str, default = "./output",
                     help = "Output directory for saving the video clips")
-    ap.add_argument("--num-videos", type = int, default = 5,
+    ap.add_argument("--num-videos", type = int, default = 500,
                     help = "Number of videos to generate")
     args = ap.parse_args(argv)
 

@@ -23,11 +23,11 @@ class Generator():
 
     def setup_lamp(self):
         self.lamp = bpy.data.lamps['Lamp']
-        self.lamp.type = "SUN"
+        self.lamp.type = "POINT"
         #self.lamp.color = (0.5172079205513, 0.9855771064758301, 1.0) # set to bluish light
         self.lamp.color = (1.0, 1.0, 1.0)
         #self.lamp.color = np.random.random((3,))
-        self.lamp.energy = 0.5
+        self.lamp.energy = 1.0
         #self.lamp.distance = 10.0
 
     def add_material(sekf):
@@ -126,12 +126,15 @@ def main():
                     help = "Output directory for saving the video clips")
     ap.add_argument("--num-videos", type = int, default = 500,
                     help = "Number of videos to generate")
+    ap.add_argument("--resume-from", type = int, default = 0,
+                    help = "Resume creating videos from the given number")
     args = ap.parse_args(argv)
 
     if not os.path.isdir(args.out_dir):
         os.makedirs(args.out_dir)
 
-    for itr in range(args.num_videos):
+    for itr in range(args.resume_from, args.num_videos):
+        print("=> Processing iteration {}".format(itr))
         out_dir = os.path.join(args.out_dir, str(itr) + "/")
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)

@@ -14,6 +14,7 @@ class Generator():
     def __init__(self):
         self.scene = bpy.context.scene
         self.render = self.scene.render
+        self.material_count = 0
 
     def cleanup_scene(self):
         for material in bpy.data.materials:
@@ -23,17 +24,19 @@ class Generator():
 
     def setup_lamp(self):
         self.lamp = bpy.data.lamps['Lamp']
-        self.lamp.type = "POINT"
+        self.lamp.type = "SUN"
         #self.lamp.color = (0.5172079205513, 0.9855771064758301, 1.0) # set to bluish light
         self.lamp.color = (1.0, 1.0, 1.0)
         #self.lamp.color = np.random.random((3,))
         self.lamp.energy = 1.0
         #self.lamp.distance = 10.0
 
-    def add_material(sekf):
-        bpy.data.materials.new(name = "Material")
-        material = bpy.data.materials["Material"]
+    def add_material(self):
+        material_name = "Material_" + str(self.material_count)
+        bpy.data.materials.new(name = material_name)
+        material = bpy.data.materials[material_name]
         material.diffuse_color = np.random.random((3,))
+        self.material_count += 1
         return material
 
     def add_path(self):
@@ -79,9 +82,20 @@ class Generator():
         override={'constraint':self.cube.constraints["Follow Path"]}
         bpy.ops.constraint.followpath_path_animate(override, constraint='Follow Path')
 
+    def setup_plane(self):
+        self.plane = bpy.data.objects['Plane']
+        material = self.add_material()
+        if self.plane.data.materials:
+            self.plane.data.materials[0] = material
+        else:
+            self.plane.data.materials.append(material)
+
+        self.plane.active_material = material
+
     def setup_scene(self):
         self.setup_lamp()
         self.setup_cube()
+        self.setup_plane()
 
     def setup_render_node_tree(self, out_dir):
         tree = self.scene.node_tree
@@ -103,7 +117,7 @@ class Generator():
         links.new(rlayers_node.outputs["Color"], color_node.inputs["Image"])
 
     def render_scene(self, out_dir):
-        self.render.engine = "BLENDER_RENDER"
+        self.render.engine = "CYCLES"
         self.scene.use_nodes = True
         self.render.layers["RenderLayer"].use_pass_color = True
         self.setup_render_node_tree(out_dir)

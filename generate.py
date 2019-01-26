@@ -114,14 +114,28 @@ class Generator():
 
         color_node = nodes.new(type = "CompositorNodeOutputFile")
         color_node.base_path = os.path.join(out_dir, "reflectance/")
-        links.new(rlayers_node.outputs["Color"], color_node.inputs["Image"])
+        links.new(rlayers_node.outputs["DiffCol"], color_node.inputs["Image"])
 
     def render_scene(self, out_dir):
         self.render.engine = "CYCLES"
+        self.render.resolution_x = 1024
+        self.render.resolution_y = 1024
+        self.render.tile_x = 256
+        self.render.tile_y = 256
+        self.scene.frame_start = 1
+        self.scene.frame_end = 100
         self.scene.use_nodes = True
-        self.render.layers["RenderLayer"].use_pass_color = True
+        self.render.layers["RenderLayer"].samples = 64
+        self.render.layers["RenderLayer"].use_pass_combined = False
+        self.render.layers["RenderLayer"].use_pass_diffuse_color = True
         self.setup_render_node_tree(out_dir)
-        bpy.ops.render.render(animation = True)
+        #bpy.ops.render.render(animation = True)
+
+        self.scene.frame_set(1)
+        bpy.ops.render.render(write_still = True)
+
+        self.scene.frame_set(50)
+        bpy.ops.render.render(write_still = True)
 
     def generate(self, out_dir):
         self.setup_scene()
@@ -149,7 +163,7 @@ def main():
 
     for itr in range(args.resume_from, args.num_videos):
         print("=> Processing iteration {}".format(itr))
-        out_dir = os.path.join(args.out_dir, str(itr) + "/")
+        out_dir = os.path.join(args.out_dir, "{:05d}/".format(itr))
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
         scene = Generator()

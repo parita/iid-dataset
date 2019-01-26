@@ -49,6 +49,7 @@ class Generator():
         bpy.data.materials.new(name = material_name)
         material = bpy.data.materials[material_name]
         material.diffuse_color = np.random.random((3,))
+        material.specular_intensity = 0
         self.material_count += 1
         return material
 

@@ -1,6 +1,7 @@
 import os
 import sys
 import bpy
+import time
 import numpy as np
 
 blend_dir = os.path.basename(bpy.data.filepath)
@@ -11,10 +12,11 @@ sys.path.append("./")
 import argparse
 
 class Generator():
-    def __init__(self):
+    def __init__(self, use_gpu):
         self.scene = bpy.context.scene
         self.render = self.scene.render
         self.material_count = 0
+        self.use_gpu = use_gpu
 
     def cleanup_scene(self):
         for material in bpy.data.materials:
@@ -114,10 +116,22 @@ class Generator():
 
         color_node = nodes.new(type = "CompositorNodeOutputFile")
         color_node.base_path = os.path.join(out_dir, "reflectance/")
-        links.new(rlayers_node.outputs["DiffCol"], color_node.inputs["Image"])
+        links.new(rlayers_node.outputs["Diffuse"], color_node.inputs["Image"])
 
     def render_scene(self, out_dir):
         self.render.engine = "CYCLES"
+
+        if self.use_gpu:
+            for card_num, card in enumerate(bpy.context.user_preferences.addons['cycles'].preferences.devices):
+                print("GPU Device {}: {}".format(card_num, card.name))
+            bpy.context.scene.cycles.device = 'GPU'
+            bpy.context.user_preferences.addons['cycles'].preferences.compute_device_type = 'CUDA'
+            # Modify the command below to CUDA_0 to use only the 0th CUDA device
+            bpy.context.user_preferences.addons['cycles'].preferences.compute_device = 'CUDA_MULTI_2'
+            bpy.ops.wm.save_userpref()
+        else:
+            bpy.context.scene.cycles.device = 'CPU'
+
         self.render.resolution_x = 1024
         self.render.resolution_y = 1024
         self.render.tile_x = 256
@@ -131,11 +145,9 @@ class Generator():
         self.setup_render_node_tree(out_dir)
         #bpy.ops.render.render(animation = True)
 
-        self.scene.frame_set(1)
-        bpy.ops.render.render(write_still = True)
-
-        self.scene.frame_set(50)
-        bpy.ops.render.render(write_still = True)
+        for itr in range(1, 20):
+            self.scene.frame_set(itr)
+            bpy.ops.render.render(write_still = True)
 
     def generate(self, out_dir):
         self.setup_scene()
@@ -156,18 +168,23 @@ def main():
                     help = "Number of videos to generate")
     ap.add_argument("--resume-from", type = int, default = 0,
                     help = "Resume creating videos from the given number")
+    ap.add_argument("--use-gpu", type = int, default = 0,
+                    help = "Use GPU if available (default: 0)")
     args = ap.parse_args(argv)
 
     if not os.path.isdir(args.out_dir):
         os.makedirs(args.out_dir)
 
+    start = time.time()
     for itr in range(args.resume_from, args.num_videos):
         print("=> Processing iteration {}".format(itr))
         out_dir = os.path.join(args.out_dir, "{:05d}/".format(itr))
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
-        scene = Generator()
+        scene = Generator(use_gpu = args.use_gpu)
         scene.generate(out_dir = out_dir)
+    print("\nBlender takes {} secs to generate {} videos".format(
+        time.time() - start, args.num_videos - args.resume_from))
 
 if __name__=="__main__":
     main()

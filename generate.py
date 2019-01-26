@@ -4,6 +4,7 @@ import bpy
 import numpy as np
 import random
 import bisect
+from collections import Counter
 
 blend_dir = os.path.basename(bpy.data.filepath)
 if blend_dir not in sys.path:
@@ -11,6 +12,8 @@ if blend_dir not in sys.path:
 sys.path.append("./")
 
 import argparse
+import nurbs
+
 
 class Generator():
     def __init__(self):
@@ -57,6 +60,12 @@ class Generator():
     def get_random_primitive_factory(self):
         return random.choice([bpy.ops.mesh.primitive_cube_add, bpy.ops.mesh.primitive_cylinder_add, bpy.ops.mesh.primitive_uv_sphere_add])
 
+    def get_path_center(self, curve_data, nu):
+        resolution = (curve_data.render_resolution_u if curve_data.render_resolution_u else curve_data.resolution_u)
+        coord_array = nurbs.nurb_make_curve(nu, resolution, 3)
+        verts = [coord_array[i: i + 3] for i in range(0, len(coord_array), 3)]
+        return verts[len(verts) // 2]
+
     def add_path(self):
         curve_data = bpy.data.curves.new("curve_data", type = "CURVE")
         curve_data.dimensions = '3D'
@@ -64,11 +73,11 @@ class Generator():
         num_points = 5
         curve_scale = 5
         coords = np.multiply(curve_scale, self.get_random_points(num_points, 2))
-        polyline = curve_data.splines.new('NURBS')
-        polyline.points.add(len(coords) - 1)
+        nu = curve_data.splines.new('NURBS')
+        nu.points.add(len(coords) - 1)
         for i, coord in enumerate(coords):
             x, y, z = coord
-            polyline.points[i].co = (x, y, z, 1)
+            nu.points[i].co = (x, y, z, 1)
 
         path = bpy.data.objects.new("mover_path", curve_data)
         curve_data.bevel_depth = 0.01
@@ -77,27 +86,8 @@ class Generator():
         self.scene.objects.active = path
         path.hide_render = True
 
-        #Get a mesh copy of the curve and use it to find an occlusion point
-        #Duplicate
-        bpy.ops.object.select_all(action="DESELECT")
-        bpy.ops.object.select_pattern(pattern='mover_path')
-        bpy.ops.object.duplicate()
-        path_copy = bpy.context.scene.objects.active
-
-        #Convert to mesh
-        bpy.ops.object.select_all(action="DESELECT")
-        bpy.ops.object.select_pattern(pattern=path_copy.name)
-        bpy.ops.object.convert(target="MESH")
-
-        #Get vertices (note the weird mesh name)
-        path_mesh = bpy.data.meshes[path_copy.data.name]
-
-        edges = [list(edge.vertices) for edge in path_mesh.edges]
-        points = [list(vertex.co) for vertex in path_mesh.vertices]
-
-        #Get occlusion point - middle of points doesn't seem to correspond well to the middle of the curve, so just pick a random point on the path
-        occPoint = points[edges[len(edges) // 2][0]]
-        #occPoint = list(random.choice(points))
+        #Get occlusion point
+        occPoint = self.get_path_center(curve_data, nu)
 
         return path, occPoint
 

@@ -35,13 +35,14 @@ class Generator():
         self.lamp.energy = 1.0
         self.lamp.shadow_method = shadowMethod
 
-    def setup_camera(self, loc=(0,0,30), angle=(0,0,0)):
+    def setup_camera(self, loc=(0,-17.5,30), angle=(30,0,0)):
+        self.camera = self.scene.camera
         # Set camera rotation in euler angles
-        self.scene.camera.rotation_mode = 'XYZ'
-        self.scene.camera.rotation_euler = list(np.multiply(angle, (np.pi/180.0)))
+        self.camera.rotation_mode = 'XYZ'
+        self.camera.rotation_euler = list(np.multiply(angle, (np.pi/180.0)))
 
         # Set camera translation
-        self.scene.camera.location = loc
+        self.camera.location = loc
 
     def new_random_material(self):
         material_name = "Material_" + str(self.material_count)
@@ -91,8 +92,12 @@ class Generator():
 
         return path, occPoint
 
-    def add_occlusion(self, occPoint, occShift=[0,0,3]):
-        occPoint = list(np.add(occPoint, occShift))
+    def get_vec_to_camera(self, point):
+        vec = np.subtract(list(self.camera.location), point)
+        return vec/np.linalg.norm(vec)
+
+    def add_occlusion(self, occPoint, occDist=3):
+        occPoint += occDist * self.get_vec_to_camera(occPoint)
         factory = self.get_random_primitive_factory()
         factory(location=tuple(occPoint))
         self.occlusion = bpy.context.scene.objects.active

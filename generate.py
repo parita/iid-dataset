@@ -61,7 +61,7 @@ class Generator():
         curve_data = bpy.data.curves.new("curve_data", type = "CURVE")
         curve_data.dimensions = '3D'
 
-        num_points = 10
+        num_points = 5
         curve_scale = 5
         coords = np.multiply(curve_scale, self.get_random_points(num_points, 2))
         polyline = curve_data.splines.new('NURBS')

@@ -3,6 +3,7 @@ import sys
 import bpy
 import numpy as np
 import random
+import bisect
 
 blend_dir = os.path.basename(bpy.data.filepath)
 if blend_dir not in sys.path:
@@ -24,7 +25,7 @@ class Generator():
         bpy.ops.object.select_all(action='INVERT')
         bpy.ops.object.delete()
 
-    def setup_lamp(self, shadowMethod="NOSHADOW"):
+    def setup_lamp(self, shadowMethod="RAY_SHADOW"):
         self.lamp = bpy.data.lamps['Lamp']
         self.lamp.type = "SUN"
         self.lamp.color = (1.0, 1.0, 1.0)
@@ -53,11 +54,14 @@ class Generator():
         #return np.concatenate([[origin], points])
         return points
 
+    def get_random_primitive_factory(self):
+        return random.choice([bpy.ops.mesh.primitive_cube_add, bpy.ops.mesh.primitive_cylinder_add, bpy.ops.mesh.primitive_uv_sphere_add])
+
     def add_path(self):
         curve_data = bpy.data.curves.new("curve_data", type = "CURVE")
         curve_data.dimensions = '3D'
 
-        num_points = 5
+        num_points = 10
         curve_scale = 5
         coords = np.multiply(curve_scale, self.get_random_points(num_points, 2))
         polyline = curve_data.splines.new('NURBS')
@@ -66,7 +70,7 @@ class Generator():
             x, y, z = coord
             polyline.points[i].co = (x, y, z, 1)
 
-        path = bpy.data.objects.new("cube_path", curve_data)
+        path = bpy.data.objects.new("mover_path", curve_data)
         curve_data.bevel_depth = 0.01
 
         self.scene.objects.link(path)
@@ -76,7 +80,7 @@ class Generator():
         #Get a mesh copy of the curve and use it to find an occlusion point
         #Duplicate
         bpy.ops.object.select_all(action="DESELECT")
-        bpy.ops.object.select_pattern(pattern='cube_path')
+        bpy.ops.object.select_pattern(pattern='mover_path')
         bpy.ops.object.duplicate()
         path_copy = bpy.context.scene.objects.active
 
@@ -88,15 +92,19 @@ class Generator():
         #Get vertices (note the weird mesh name)
         path_mesh = bpy.data.meshes[path_copy.data.name]
 
-        points = [vertex.co for vertex in path_mesh.vertices]
-        #occPoint = list(points[len(points) // 2])
-        occPoint = list(random.choice(points))
+        edges = [list(edge.vertices) for edge in path_mesh.edges]
+        points = [list(vertex.co) for vertex in path_mesh.vertices]
+
+        #Get occlusion point - middle of points doesn't seem to correspond well to the middle of the curve, so just pick a random point on the path
+        occPoint = points[edges[len(edges) // 2][0]]
+        #occPoint = list(random.choice(points))
 
         return path, occPoint
 
     def add_occlusion(self, occPoint, occShift=[0,0,3]):
         occPoint = list(np.add(occPoint, occShift))
-        bpy.ops.mesh.primitive_cube_add(location=tuple(occPoint))
+        factory = self.get_random_primitive_factory()
+        factory(location=tuple(occPoint))
         self.occlusion = bpy.context.scene.objects.active
         self.occlusion.scale = (2, 2, 1)
         material = self.new_random_material()
@@ -107,33 +115,34 @@ class Generator():
 
 
 
-    def add_cube(self, loc=(0,0,0)):
-        bpy.ops.mesh.primitive_cube_add(location=tuple(loc))
-        self.cube = bpy.context.scene.objects.active
+    def add_mover(self, loc=(0,0,0)):
+        factory = self.get_random_primitive_factory()
+        factory(location=tuple(loc))
+        self.mover = bpy.context.scene.objects.active
 
         material = self.new_random_material()
-        if self.cube.data.materials:
-            self.cube.data.materials[0] = material
+        if self.mover.data.materials:
+            self.mover.data.materials[0] = material
         else:
-            self.cube.data.materials.append(material)
+            self.mover.data.materials.append(material)
 
-        #Set ambient shading for cube to reduce hazing caused by background plane color
+        #Set ambient shading for mover to reduce hazing caused by background plane color
         material.ambient = 0
 
-        self.cube.active_material = material
+        self.mover.active_material = material
         path, occPoint = self.add_path()
         bpy.ops.object.select_all(action='DESELECT')
-        self.scene.objects.active = self.cube
+        self.scene.objects.active = self.mover
 
         bpy.ops.object.constraint_add(type = 'FOLLOW_PATH')
-        self.cube.constraints["Follow Path"].target = path
-        self.cube.constraints["Follow Path"].forward_axis = 'FORWARD_X'
-        self.cube.constraints["Follow Path"].use_curve_follow = True
+        self.mover.constraints["Follow Path"].target = path
+        self.mover.constraints["Follow Path"].forward_axis = 'FORWARD_X'
+        self.mover.constraints["Follow Path"].use_curve_follow = True
 
-        override={'constraint':self.cube.constraints["Follow Path"]}
+        override={'constraint':self.mover.constraints["Follow Path"]}
         bpy.ops.constraint.followpath_path_animate(override, constraint='Follow Path')
 
-        #Add occlusion cube
+        #Add occlusion mover
         self.add_occlusion(occPoint)
 
 
@@ -153,7 +162,7 @@ class Generator():
     def setup_scene(self):
         self.setup_lamp()
         self.setup_camera()
-        self.add_cube()
+        self.add_mover()
         self.add_plane()
 
         #Shorten to 100 frames, default length for animation

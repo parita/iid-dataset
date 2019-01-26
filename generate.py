@@ -2,6 +2,7 @@ import os
 import sys
 import bpy
 import numpy as np
+import random
 
 blend_dir = os.path.basename(bpy.data.filepath)
 if blend_dir not in sys.path:
@@ -17,21 +18,28 @@ class Generator():
         self.material_count = 0
 
     def cleanup_scene(self):
-        for material in bpy.data.materials:
-            bpy.data.materials.remove(material)
-        for curve in bpy.data.curves:
-            bpy.data.curves.remove(curve)
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.ops.object.select_by_type(type='CAMERA', extend=True)
+        bpy.ops.object.select_by_type(type='LAMP', extend=True)
+        bpy.ops.object.select_all(action='INVERT')
+        bpy.ops.object.delete()
 
-    def setup_lamp(self):
+    def setup_lamp(self, shadowMethod="NOSHADOW"):
         self.lamp = bpy.data.lamps['Lamp']
         self.lamp.type = "SUN"
-        #self.lamp.color = (0.5172079205513, 0.9855771064758301, 1.0) # set to bluish light
         self.lamp.color = (1.0, 1.0, 1.0)
-        #self.lamp.color = np.random.random((3,))
         self.lamp.energy = 1.0
-        #self.lamp.distance = 10.0
+        self.lamp.shadow_method = shadowMethod
 
-    def add_material(self):
+    def setup_camera(self, loc=(0,0,30), angle=(0,0,0)):
+        # Set camera rotation in euler angles
+        self.scene.camera.rotation_mode = 'XYZ'
+        self.scene.camera.rotation_euler = list(np.multiply(angle, (np.pi/180.0)))
+
+        # Set camera translation
+        self.scene.camera.location = loc
+
+    def new_random_material(self):
         material_name = "Material_" + str(self.material_count)
         bpy.data.materials.new(name = material_name)
         material = bpy.data.materials[material_name]
@@ -39,13 +47,20 @@ class Generator():
         self.material_count += 1
         return material
 
+    def get_random_points(self, count, dim):
+        #origin = np.array([0,0,0])
+        points = [np.append(2*(np.random.random((dim,)) - 0.5), max(0, 3-dim)*[0]) * i for i in range(count)]
+        #return np.concatenate([[origin], points])
+        return points
+
     def add_path(self):
         curve_data = bpy.data.curves.new("curve_data", type = "CURVE")
         curve_data.dimensions = '3D'
 
         num_points = 5
-        coords = [np.random.random((3,)) * i for i in range(num_points)]
-        polyline = curve_data.splines.new('POLY')
+        curve_scale = 5
+        coords = np.multiply(curve_scale, self.get_random_points(num_points, 2))
+        polyline = curve_data.splines.new('NURBS')
         polyline.points.add(len(coords) - 1)
         for i, coord in enumerate(coords):
             x, y, z = coord
@@ -58,20 +73,56 @@ class Generator():
         self.scene.objects.active = path
         path.hide_render = True
 
-        return path
+        #Get a mesh copy of the curve and use it to find an occlusion point
+        #Duplicate
+        bpy.ops.object.select_all(action="DESELECT")
+        bpy.ops.object.select_pattern(pattern='cube_path')
+        bpy.ops.object.duplicate()
+        path_copy = bpy.context.scene.objects.active
 
-    def setup_cube(self):
-        self.cube = bpy.data.objects['Cube']
-        material = self.add_material()
+        #Convert to mesh
+        bpy.ops.object.select_all(action="DESELECT")
+        bpy.ops.object.select_pattern(pattern=path_copy.name)
+        bpy.ops.object.convert(target="MESH")
+
+        #Get vertices (note the weird mesh name)
+        path_mesh = bpy.data.meshes[path_copy.data.name]
+
+        points = [vertex.co for vertex in path_mesh.vertices]
+        #occPoint = list(points[len(points) // 2])
+        occPoint = list(random.choice(points))
+
+        return path, occPoint
+
+    def add_occlusion(self, occPoint, occShift=[0,0,3]):
+        occPoint = list(np.add(occPoint, occShift))
+        bpy.ops.mesh.primitive_cube_add(location=tuple(occPoint))
+        self.occlusion = bpy.context.scene.objects.active
+        self.occlusion.scale = (2, 2, 1)
+        material = self.new_random_material()
+        if self.occlusion.data.materials:
+            self.occlusion.data.materials[0] = material
+        else:
+            self.occlusion.data.materials.append(material)
+
+
+
+    def add_cube(self, loc=(0,0,0)):
+        bpy.ops.mesh.primitive_cube_add(location=tuple(loc))
+        self.cube = bpy.context.scene.objects.active
+
+        material = self.new_random_material()
         if self.cube.data.materials:
             self.cube.data.materials[0] = material
         else:
             self.cube.data.materials.append(material)
 
+        #Set ambient shading for cube to reduce hazing caused by background plane color
+        material.ambient = 0
+
         self.cube.active_material = material
-        path = self.add_path()
+        path, occPoint = self.add_path()
         bpy.ops.object.select_all(action='DESELECT')
-        bpy.ops.object.select_pattern(pattern="Cube")
         self.scene.objects.active = self.cube
 
         bpy.ops.object.constraint_add(type = 'FOLLOW_PATH')
@@ -82,20 +133,31 @@ class Generator():
         override={'constraint':self.cube.constraints["Follow Path"]}
         bpy.ops.constraint.followpath_path_animate(override, constraint='Follow Path')
 
-    def setup_plane(self):
-        self.plane = bpy.data.objects['Plane']
-        material = self.add_material()
+        #Add occlusion cube
+        self.add_occlusion(occPoint)
+
+
+
+    def add_plane(self, loc=(0,0,-2), scale=(20, 20, 1)):
+        bpy.ops.mesh.primitive_plane_add(location=loc)
+        self.plane = bpy.context.scene.objects.active
+        material = self.new_random_material()
         if self.plane.data.materials:
             self.plane.data.materials[0] = material
         else:
             self.plane.data.materials.append(material)
 
         self.plane.active_material = material
+        self.plane.scale = scale
 
     def setup_scene(self):
         self.setup_lamp()
-        self.setup_cube()
-        self.setup_plane()
+        self.setup_camera()
+        self.add_cube()
+        self.add_plane()
+
+        #Shorten to 100 frames, default length for animation
+        self.scene.frame_end=100
 
     def setup_render_node_tree(self, out_dir):
         tree = self.scene.node_tree
@@ -112,16 +174,20 @@ class Generator():
         image_node.base_path = os.path.join(out_dir, "images/")
         links.new(rlayers_node.outputs["Image"], image_node.inputs["Image"])
 
+        '''
         color_node = nodes.new(type = "CompositorNodeOutputFile")
         color_node.base_path = os.path.join(out_dir, "reflectance/")
         links.new(rlayers_node.outputs["Color"], color_node.inputs["Image"])
+        '''
 
     def render_scene(self, out_dir):
-        self.render.engine = "CYCLES"
-        self.scene.use_nodes = True
-        self.render.layers["RenderLayer"].use_pass_color = True
-        self.setup_render_node_tree(out_dir)
+        #self.render.engine = "CYCLES"
+        #self.scene.use_nodes = True
+        #self.render.layers["RenderLayer"].use_pass_color = True
+        #self.setup_render_node_tree(out_dir)
+        bpy.data.scenes['Scene'].render.filepath = out_dir
         bpy.ops.render.render(animation = True)
+        bpy.ops.image.save_dirty()
 
     def generate(self, out_dir):
         self.setup_scene()
@@ -153,6 +219,7 @@ def main():
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
         scene = Generator()
+        scene.cleanup_scene()
         scene.generate(out_dir = out_dir)
 
 if __name__=="__main__":

@@ -28,7 +28,7 @@ class Generator():
         bpy.ops.object.select_all(action='INVERT')
         bpy.ops.object.delete()
 
-    def setup_lamp(self, shadowMethod="RAY_SHADOW"):
+    def setup_lamp(self, shadowMethod="NOSHADOW"):
         self.lamp = bpy.data.lamps['Lamp']
         self.lamp.type = "SUN"
         self.lamp.color = (1.0, 1.0, 1.0)

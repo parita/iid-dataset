@@ -72,8 +72,8 @@ class Generator():
         curve_data = bpy.data.curves.new("curve_data", type = "CURVE")
         curve_data.dimensions = '3D'
 
-        num_points = 5
-        curve_scale = 5
+        num_points = 4
+        curve_scale = 10
         coords = np.multiply(curve_scale, self.get_random_points(num_points, 2))
         nu = curve_data.splines.new('NURBS')
         nu.points.add(len(coords) - 1)
